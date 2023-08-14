@@ -41,10 +41,7 @@ internal static class PutObject
 
             var fileInfo = new FileInfo(fileName);
             var metaData = new Dictionary<string, string>
-                (StringComparer.Ordinal)
-                {
-                    { "Test-Metadata", "Test  Test" }
-                };
+                (StringComparer.Ordinal) { { "Test-Metadata", "Test  Test" } };
             var args = new PutObjectArgs()
                 .WithBucket(bucketName)
                 .WithObject(objectName)
@@ -54,7 +51,7 @@ internal static class PutObject
                 .WithHeaders(metaData)
                 .WithProgress(progress)
                 .WithServerSideEncryption(sse);
-            await minio.PutObjectAsync(args).ConfigureAwait(false);
+            _ = await minio.PutObjectAsync(args).ConfigureAwait(false);
 
             Console.WriteLine($"Uploaded object {objectName} to bucket {bucketName}");
             Console.WriteLine();

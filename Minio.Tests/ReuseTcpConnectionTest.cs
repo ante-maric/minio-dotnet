@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using CommunityToolkit.HighPerformance;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -32,7 +33,7 @@ public class ReuseTcpConnectionTest
                 .WithBucket(bucket)
                 .WithObject(objectName)
                 .WithFile("testfile");
-            await client.GetObjectAsync(getObjectArgs).ConfigureAwait(false);
+            _ = await client.GetObjectAsync(getObjectArgs).ConfigureAwait(false);
 
             return true;
         }
@@ -67,18 +68,19 @@ public class ReuseTcpConnectionTest
                 .WithObject(objectName)
                 .WithStreamData(helloStream)
                 .WithObjectSize(helloData.Length);
-            await minioClient.PutObjectAsync(putObjectArgs).ConfigureAwait(false);
+            _ = await minioClient.PutObjectAsync(putObjectArgs).ConfigureAwait(false);
         }
 
-        await GetObjectLength(bucket, objectName).ConfigureAwait(false);
+        _ = await GetObjectLength(bucket, objectName).ConfigureAwait(false);
 
         for (var i = 0; i < 100; i++)
             // sequential execution, produce one tcp connection, check by netstat -an | grep 9000
-            await GetObjectLength(bucket, objectName).ConfigureAwait(false);
+            _ = await GetObjectLength(bucket, objectName).ConfigureAwait(false);
 
-        await Utils.RunInParallel(Enumerable.Range(0, 500),
-                async (task, _) => await GetObjectLength(bucket, objectName).ConfigureAwait(false), 8)
-            .ConfigureAwait(false);
+        ConcurrentBag<Task> reuseTcpConnectionTasks =
+            new(Enumerable.Range(0, 500).Select(_ => GetObjectLength(bucket, objectName)));
+
+        await reuseTcpConnectionTasks.ForEachAsync(maxNoOfParallelProcesses: 8).ConfigureAwait(false);
     }
 
     private async Task<double> GetObjectLength(string bucket, string objectName)
@@ -88,7 +90,7 @@ public class ReuseTcpConnectionTest
             .WithBucket(bucket)
             .WithObject(objectName)
             .WithCallbackStream(stream => stream.Dispose());
-        await minioClient.GetObjectAsync(getObjectArgs).ConfigureAwait(false);
+        _ = await minioClient.GetObjectAsync(getObjectArgs).ConfigureAwait(false);
 
         return objectLength;
     }

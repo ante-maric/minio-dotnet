@@ -35,17 +35,14 @@ internal static class PutObjectWithTags
         {
             Console.WriteLine("Running example for API: PutObjectAsync with Tags");
             var tags = new Dictionary<string, string>
-                (StringComparer.Ordinal)
-                {
-                    { "Test-TagKey", "Test-TagValue" }
-                };
+                (StringComparer.Ordinal) { { "Test-TagKey", "Test-TagValue" } };
             var args = new PutObjectArgs()
                 .WithBucket(bucketName)
                 .WithObject(objectName)
                 .WithContentType("application/octet-stream")
                 .WithFileName(fileName)
                 .WithTagging(Tagging.GetObjectTags(tags));
-            await minio.PutObjectAsync(args).ConfigureAwait(false);
+            _ = await minio.PutObjectAsync(args).ConfigureAwait(false);
 
             Console.WriteLine($"Uploaded object {objectName} to bucket {bucketName}");
             Console.WriteLine();

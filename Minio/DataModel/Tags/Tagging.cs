@@ -1,4 +1,4 @@
-/*
+﻿/*
  * MinIO .NET Library for Amazon S3 Compatible Cloud Storage, (C) 2020, 2021 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,10 +24,10 @@ namespace Minio.DataModel.Tags;
 [Serializable]
 [XmlRoot(ElementName = "Tagging")]
 /*
-* References for Tagging.
-* https://docs.aws.amazon.com/AmazonS3/latest/dev/object-tagging.html
-* https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html#tag-restrictions
-*/
+ * References for Tagging.
+ * https://docs.aws.amazon.com/AmazonS3/latest/dev/object-tagging.html
+ * https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html#tag-restrictions
+ */
 public class Tagging
 {
     internal const uint MAX_TAG_COUNT_PER_RESOURCE = 50;
@@ -55,8 +55,10 @@ public class Tagging
 
         foreach (var tag in tags)
         {
-            if (!ValidateTagKey(tag.Key)) throw new ArgumentException("Invalid Tagging key " + tag.Key);
-            if (!ValidateTagValue(tag.Value)) throw new ArgumentException("Invalid Tagging value " + tag.Value);
+            if (!ValidateTagKey(tag.Key))
+                throw new InvalidOperationException("Invalid Tagging key " + tag.Key);
+            if (!ValidateTagValue(tag.Value))
+                throw new InvalidOperationException("Invalid Tagging value " + tag.Value);
         }
 
         TaggingSet = new TagSet(tags);
@@ -81,7 +83,7 @@ public class Tagging
         if (string.IsNullOrEmpty(key) ||
             string.IsNullOrWhiteSpace(key) ||
             key.Length > MAX_TAG_KEY_LENGTH ||
-            key.Contains('&'))
+            key.Contains('&', StringComparison.Ordinal))
             return false;
 
         return true;
@@ -91,7 +93,7 @@ public class Tagging
     {
         if (value is null || // Empty or whitespace is allowed
             value.Length > MAX_TAG_VALUE_LENGTH ||
-            value.Contains('&'))
+            value.Contains('&', StringComparison.OrdinalIgnoreCase))
             return false;
 
         return true;
@@ -105,10 +107,7 @@ public class Tagging
 
         try
         {
-            var settings = new XmlWriterSettings
-            {
-                OmitXmlDeclaration = true
-            };
+            var settings = new XmlWriterSettings { OmitXmlDeclaration = true };
             var ns = new XmlSerializerNamespaces();
             ns.Add(string.Empty, string.Empty);
 

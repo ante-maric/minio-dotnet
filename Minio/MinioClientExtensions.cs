@@ -3,7 +3,9 @@ using System.Globalization;
 using System.Net;
 using Minio.Credentials;
 using Minio.DataModel;
+using Minio.DataModel.Result;
 using Minio.Exceptions;
+using Minio.Handlers;
 using Minio.Helper;
 
 namespace Minio;
@@ -90,7 +92,7 @@ public static class MinioClientExtensions
             minioClient.Secure = true;
             if (string.IsNullOrEmpty(minioClient.BaseUrl))
                 return minioClient;
-            var secureUrl = RequestUtil.MakeTargetURL(minioClient.BaseUrl, minioClient.Secure);
+            //var secureUrl = RequestUtil.MakeTargetURL(minioClient.BaseUrl, minioClient.Secure);
         }
 
         return minioClient;
@@ -131,11 +133,26 @@ public static class MinioClientExtensions
     /// <param name="retryPolicyHandler">Delegate that will wrap execution of http client requests.</param>
     /// <returns></returns>
     public static MinioClient WithRetryPolicy(this MinioClient minioClient,
-        RetryPolicyHandler retryPolicyHandler)
+        IRetryPolicyHandler retryPolicyHandler)
     {
         if (minioClient is null) throw new ArgumentNullException(nameof(minioClient));
 
         minioClient.RetryPolicyHandler = retryPolicyHandler;
+        return minioClient;
+    }
+
+    /// <summary>
+    ///     Allows to add retry policy handler
+    /// </summary>
+    /// <param name="minioClient">The MinioClient instance used</param>
+    /// <param name="retryPolicyHandler">Delegate that will wrap execution of http client requests.</param>
+    /// <returns></returns>
+    public static MinioClient WithRetryPolicy(this MinioClient minioClient,
+        Func<Func<Task<ResponseResult>>, Task<ResponseResult>> retryPolicyHandler)
+    {
+        if (minioClient is null) throw new ArgumentNullException(nameof(minioClient));
+
+        _ = minioClient.WithRetryPolicy(new DefaultRetryPolicyHandler(retryPolicyHandler));
         return minioClient;
     }
 
@@ -217,7 +234,8 @@ public static class MinioClientExtensions
         minioClient.HttpClient ??= minioClient.Proxy is null
             ? new HttpClient()
             : new HttpClient(httpClientHandler);
-        minioClient.HttpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", minioClient.FullUserAgent);
+        _ = minioClient.HttpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+            minioClient.FullUserAgent);
         minioClient.HttpClient.Timeout = TimeSpan.FromMinutes(30);
         return minioClient;
     }
@@ -252,7 +270,7 @@ public static class MinioClientExtensions
                 nameof(endpoint));
 
         if (endpoint.EndsWith("/", StringComparison.OrdinalIgnoreCase))
-            endpoint = endpoint.Substring(0, endpoint.Length - 1);
+            endpoint = endpoint[..^1];
         if (!BuilderUtil.IsValidHostnameOrIPAddress(endpoint))
             throw new InvalidEndpointException(
                 string.Format(CultureInfo.InvariantCulture, "{0} is invalid hostname.", endpoint), "endpoint");

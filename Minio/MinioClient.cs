@@ -23,27 +23,22 @@ using CommunityToolkit.HighPerformance;
 using Minio.Credentials;
 using Minio.DataModel;
 using Minio.DataModel.Args;
+using Minio.DataModel.Result;
 using Minio.DataModel.Tracing;
 using Minio.Exceptions;
+using Minio.Handlers;
 using Minio.Helper;
 
 namespace Minio;
 
 public partial class MinioClient : IMinioClient
 {
-    /// <summary>
-    ///     Default error handling delegate
-    /// </summary>
-    private readonly ApiResponseErrorHandler _defaultErrorHandlingDelegate = response =>
-    {
-        if (response.StatusCode < HttpStatusCode.OK || response.StatusCode >= HttpStatusCode.BadRequest)
-            ParseError(response);
-    };
+    private static readonly char[] separator = { '/' };
 
-    internal readonly IEnumerable<ApiResponseErrorHandler> NoErrorHandlers =
-        Enumerable.Empty<ApiResponseErrorHandler>();
+    internal readonly IEnumerable<IApiResponseErrorHandler> NoErrorHandlers =
+        Enumerable.Empty<IApiResponseErrorHandler>();
 
-    private string CustomUserAgent = string.Empty;
+    private string customUserAgent = string.Empty;
     private bool disposedValue;
 
     internal bool DisposeHttpClient = true;
@@ -59,7 +54,7 @@ public partial class MinioClient : IMinioClient
     internal int RequestTimeout;
 
     // Handler for task retry policy
-    internal RetryPolicyHandler RetryPolicyHandler;
+    internal IRetryPolicyHandler RetryPolicyHandler;
 
     // Enables HTTP tracing if set to true
     private bool trace;
@@ -77,6 +72,11 @@ public partial class MinioClient : IMinioClient
         SessionToken = "";
         Provider = null;
     }
+
+    /// <summary>
+    ///     Default error handling delegate
+    /// </summary>
+    public IApiResponseErrorHandler DefaultErrorHandler { get; set; } = new DefaultErrorHandler();
 
     // Save Credentials from user
     internal string AccessKey { get; set; }
@@ -115,7 +115,7 @@ public partial class MinioClient : IMinioClient
     /// <summary>
     ///     Returns the User-Agent header for the request
     /// </summary>
-    internal string FullUserAgent => $"{SystemUserAgent} {CustomUserAgent}";
+    internal string FullUserAgent => $"{SystemUserAgent} {customUserAgent}";
 
     /// <summary>
     ///     Runs httpClient's GetAsync method
@@ -146,7 +146,7 @@ public partial class MinioClient : IMinioClient
         if (string.IsNullOrEmpty(appVersion))
             throw new ArgumentException("Appversion cannot be null or empty", nameof(appVersion));
 
-        CustomUserAgent = $"{appName}/{appVersion}";
+        customUserAgent = $"{appName}/{appVersion}";
     }
 
     /// <summary>
@@ -186,16 +186,13 @@ public partial class MinioClient : IMinioClient
 
         // pick region from endpoint if present
         if (!string.IsNullOrEmpty(Endpoint))
-            rgn = Regions.GetRegionFromEndpoint(Endpoint);
+            rgn = RegionHelper.GetRegionFromEndpoint(Endpoint);
 
         // Pick region from location HEAD request
         if (rgn?.Length == 0)
-        {
-            if (!BucketRegionCache.Instance.Exists(bucketName))
-                rgn = await BucketRegionCache.Update(this, bucketName).ConfigureAwait(false);
-            else
-                rgn = BucketRegionCache.Instance.Region(bucketName);
-        }
+            rgn = BucketRegionCache.Instance.Exists(bucketName)
+                ? await BucketRegionCache.Update(this, bucketName).ConfigureAwait(false)
+                : BucketRegionCache.Instance.Region(bucketName);
 
         // Defaults to us-east-1 if region could not be found
         return rgn?.Length == 0 ? "us-east-1" : rgn;
@@ -239,7 +236,7 @@ public partial class MinioClient : IMinioClient
         ArgsCheck(args);
 
         var contentType = "application/octet-stream";
-        args.Headers?.TryGetValue("Content-Type", out contentType);
+        _ = args.Headers?.TryGetValue("Content-Type", out contentType);
         var requestMessageBuilder =
             await CreateRequest(args.RequestMethod,
                 args.BucketName,
@@ -329,10 +326,10 @@ public partial class MinioClient : IMinioClient
             if (method == HttpMethod.Put && objectName is null && resourcePath is null)
                 // use path style for make bucket to workaround "AuthorizationHeaderMalformed" error from s3.amazonaws.com
                 usePathStyle = true;
-            else if (resourcePath?.Contains("location") == true)
+            else if (resourcePath?.Contains("location", StringComparison.OrdinalIgnoreCase) == true)
                 // use path style for location query
                 usePathStyle = true;
-            else if (bucketName.Contains('.') && Secure)
+            else if (bucketName.Contains('.', StringComparison.Ordinal) && Secure)
                 // use path style where '.' in bucketName causes SSL certificate validation error
                 usePathStyle = true;
 
@@ -378,7 +375,7 @@ public partial class MinioClient : IMinioClient
     /// <param name="cancellationToken">Optional cancellation token to cancel the operation</param>
     /// <returns>ResponseResult</returns>
     internal Task<ResponseResult> ExecuteTaskAsync(
-        IEnumerable<ApiResponseErrorHandler> errorHandlers,
+        IEnumerable<IApiResponseErrorHandler> errorHandlers,
         HttpRequestMessageBuilder requestMessageBuilder,
         bool isSts = false,
         CancellationToken cancellationToken = default)
@@ -397,17 +394,12 @@ public partial class MinioClient : IMinioClient
     }
 
     private async Task<ResponseResult> ExecuteTaskCoreAsync(
-        IEnumerable<ApiResponseErrorHandler> errorHandlers,
+        IEnumerable<IApiResponseErrorHandler> errorHandlers,
         HttpRequestMessageBuilder requestMessageBuilder,
         bool isSts = false,
         CancellationToken cancellationToken = default)
     {
         var startTime = DateTime.Now;
-        // Logs full url when HTTPtracing is enabled.
-        if (trace)
-        {
-            var fullUrl = requestMessageBuilder.RequestUri;
-        }
 
         var v4Authenticator = new V4Authenticator(Secure,
             AccessKey, SecretKey, Region,
@@ -509,7 +501,7 @@ public partial class MinioClient : IMinioClient
         errorResponse.Resource = pathAndQuery;
 
         // zero, one or two segments
-        var resourceSplits = pathAndQuery.Split(new[] { '/' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        var resourceSplits = pathAndQuery.Split(separator, 2, StringSplitOptions.RemoveEmptyEntries);
 
         if (HttpStatusCode.NotFound.Equals(response.StatusCode))
         {
@@ -595,10 +587,7 @@ public partial class MinioClient : IMinioClient
             && response.Request.RequestUri.PathAndQuery.EndsWith("?policy", StringComparison.OrdinalIgnoreCase)
             && response.Request.Method.Equals(HttpMethod.Get)
             && string.Equals(errResponse.Code, "NoSuchBucketPolicy", StringComparison.OrdinalIgnoreCase))
-            throw new ErrorResponseException(errResponse, response)
-            {
-                XmlError = response.Content
-            };
+            throw new ErrorResponseException(errResponse, response) { XmlError = response.Content };
 
         if (response.StatusCode.Equals(HttpStatusCode.NotFound)
             && string.Equals(errResponse.Code, "NoSuchBucket", StringComparison.OrdinalIgnoreCase))
@@ -619,7 +608,7 @@ public partial class MinioClient : IMinioClient
             && errResponse.Code.Equals("InvalidRequest", StringComparison.OrdinalIgnoreCase))
         {
             var legalHold = new Dictionary<string, string>(StringComparer.Ordinal) { { "legal-hold", "" } };
-            if (response.Request.RequestUri.Query.Contains("legalHold"))
+            if (response.Request.RequestUri.Query.Contains("legalHold", StringComparison.OrdinalIgnoreCase))
                 throw new MissingObjectLockConfigurationException(errResponse.BucketName, errResponse.Message);
         }
 
@@ -636,11 +625,7 @@ public partial class MinioClient : IMinioClient
             throw new ArgumentException("Bucket already owned by you: " + errResponse.BucketName,
                 nameof(response));
 
-        throw new UnexpectedMinioException(errResponse.Message)
-        {
-            Response = errResponse,
-            XmlError = response.Content
-        };
+        throw new UnexpectedMinioException(errResponse.Message) { Response = errResponse, XmlError = response.Content };
     }
 
     /// <summary>
@@ -649,7 +634,7 @@ public partial class MinioClient : IMinioClient
     /// <param name="response"></param>
     /// <param name="handlers"></param>
     /// <param name="startTime"></param>
-    private void HandleIfErrorResponse(ResponseResult response, IEnumerable<ApiResponseErrorHandler> handlers,
+    private void HandleIfErrorResponse(ResponseResult response, IEnumerable<IApiResponseErrorHandler> handlers,
         DateTime startTime)
     {
         // Logs Response if HTTP tracing is enabled
@@ -662,10 +647,10 @@ public partial class MinioClient : IMinioClient
         if (handlers is null) throw new ArgumentNullException(nameof(handlers));
 
         // Run through handlers passed to take up error handling
-        foreach (var handler in handlers) handler(response);
+        foreach (var handler in handlers) handler.Handle(response);
 
         // Fall back default error handler
-        _defaultErrorHandlingDelegate(response);
+        DefaultErrorHandler.Handle(response);
     }
 
     /// <summary>
@@ -713,7 +698,7 @@ public partial class MinioClient : IMinioClient
     {
         return RetryPolicyHandler is null
             ? executeRequestCallback()
-            : RetryPolicyHandler(executeRequestCallback);
+            : RetryPolicyHandler.Handle(executeRequestCallback);
     }
 
     protected virtual void Dispose(bool disposing)
@@ -727,8 +712,3 @@ public partial class MinioClient : IMinioClient
         }
     }
 }
-
-internal delegate void ApiResponseErrorHandler(ResponseResult response);
-
-public delegate Task<ResponseResult> RetryPolicyHandler(
-    Func<Task<ResponseResult>> executeRequestCallback);

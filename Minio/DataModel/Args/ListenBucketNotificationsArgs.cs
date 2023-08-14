@@ -15,13 +15,14 @@
  */
 
 using Minio.DataModel.Notification;
+using Minio.Handlers;
 
 namespace Minio.DataModel.Args;
 
 public class ListenBucketNotificationsArgs : BucketArgs<ListenBucketNotificationsArgs>
 {
-    internal readonly IEnumerable<ApiResponseErrorHandler> NoErrorHandlers =
-        Enumerable.Empty<ApiResponseErrorHandler>();
+    internal readonly IEnumerable<IApiResponseErrorHandler> NoErrorHandlers =
+        Enumerable.Empty<IApiResponseErrorHandler>();
 
     public ListenBucketNotificationsArgs()
     {
@@ -74,11 +75,7 @@ public class ListenBucketNotificationsArgs : BucketArgs<ListenBucketNotification
             while (!sr.EndOfStream)
                 try
                 {
-#if NETSTANDARD || NET6_0
-                    var line = await sr.ReadLineAsync().ConfigureAwait(false);
-#elif NET7_0_OR_GREATER
                     var line = await sr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-#endif
                     if (string.IsNullOrEmpty(line))
                         break;
 

@@ -16,6 +16,7 @@
 
 using System.Text;
 using Minio.DataModel.Tracing;
+using Minio.Handlers;
 
 namespace Minio.Examples.Cases;
 
@@ -25,13 +26,13 @@ internal sealed class MyRequestLogger : IRequestLogger
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine("My logger says:");
-        sb.Append("statusCode: ");
-        sb.AppendLine(responseToLog.StatusCode.ToString());
-        sb.AppendLine();
+        _ = sb.AppendLine("My logger says:");
+        _ = sb.Append("statusCode: ");
+        _ = sb.AppendLine(responseToLog.StatusCode.ToString());
+        _ = sb.AppendLine();
 
-        sb.AppendLine("Response: ");
-        sb.Append(responseToLog.Content);
+        _ = sb.AppendLine("Response: ");
+        _ = sb.Append(responseToLog.Content);
 
         Console.WriteLine(sb.ToString());
     }

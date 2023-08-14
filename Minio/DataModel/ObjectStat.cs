@@ -61,10 +61,7 @@ public class ObjectStat
             throw new ArgumentNullException(nameof(objectName), "Name of an object cannot be empty");
         if (responseHeaders is null) throw new ArgumentNullException(nameof(responseHeaders));
 
-        var objInfo = new ObjectStat
-        {
-            ObjectName = objectName
-        };
+        var objInfo = new ObjectStat { ObjectName = objectName };
         foreach (var paramName in responseHeaders.Keys)
         {
             var paramValue = responseHeaders[paramName];
@@ -77,7 +74,7 @@ public class ObjectStat
                     objInfo.LastModified = DateTime.Parse(paramValue, CultureInfo.InvariantCulture);
                     break;
                 case "etag":
-                    objInfo.ETag = paramValue.Replace("\"", string.Empty);
+                    objInfo.ETag = paramValue.Replace("\"", string.Empty, StringComparison.OrdinalIgnoreCase);
                     break;
                 case "content-type":
                     objInfo.ContentType = paramValue;
@@ -105,9 +102,7 @@ public class ObjectStat
                     var expiryMatch = Regex.Match(expirationResponse, expiryDatePattern, RegexOptions.None,
                         TimeSpan.FromHours(1));
                     if (expiryMatch.Success)
-                        objInfo.Expires = DateTime.SpecifyKind(
-                            DateTime.Parse(expiryMatch.Value, CultureInfo.CurrentCulture),
-                            DateTimeKind.Utc);
+                        objInfo.Expires = DateTime.Parse(expiryMatch.Value, CultureInfo.CurrentCulture);
 
                     break;
                 case "x-amz-object-lock-mode":
@@ -120,9 +115,7 @@ public class ObjectStat
                 case "x-amz-object-lock-retain-until-date":
                     var lockUntilDate = paramValue;
                     if (!string.IsNullOrWhiteSpace(lockUntilDate))
-                        objInfo.ObjectLockRetainUntilDate = DateTime.SpecifyKind(
-                            DateTime.Parse(lockUntilDate, CultureInfo.CurrentCulture),
-                            DateTimeKind.Utc);
+                        objInfo.ObjectLockRetainUntilDate = DateTime.Parse(lockUntilDate, CultureInfo.CurrentCulture);
 
                     break;
                 case "x-amz-object-lock-legal-hold":
@@ -134,7 +127,7 @@ public class ObjectStat
                     if (OperationsUtil.IsSupportedHeader(paramName))
                         objInfo.MetaData[paramName] = paramValue;
                     else if (paramName.StartsWith("x-amz-meta-", StringComparison.OrdinalIgnoreCase))
-                        objInfo.MetaData[paramName.Substring("x-amz-meta-".Length)] = paramValue;
+                        objInfo.MetaData[paramName["x-amz-meta-".Length..]] = paramValue;
                     else
                         objInfo.ExtraHeaders[paramName] = paramValue;
                     break;

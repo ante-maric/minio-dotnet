@@ -1,4 +1,4 @@
-/*
+﻿/*
  * MinIO .NET Library for Amazon S3 Compatible Cloud Storage,
  * (C) 2021 MinIO, Inc.
  *
@@ -18,14 +18,16 @@
 using System.Text;
 using CommunityToolkit.HighPerformance;
 using Minio.DataModel;
+using Minio.DataModel.Result;
+using Minio.Exceptions;
 using Minio.Helper;
 
 namespace Minio.Credentials;
 
 public class AssumeRoleProvider : AssumeRoleBaseProvider<AssumeRoleProvider>
 {
-    private readonly string AssumeRole = "AssumeRole";
-    private readonly uint DefaultDurationInSeconds = 3600;
+    private readonly string assumeRole = "AssumeRole";
+    private readonly uint defaultDurationInSeconds = 3600;
 
     public AssumeRoleProvider()
     {
@@ -88,14 +90,14 @@ public class AssumeRoleProvider : AssumeRoleBaseProvider<AssumeRoleProvider>
             }
         }
 
-        throw new ArgumentNullException(nameof(Client) + " should have been assigned for the operation to continue.");
+        throw new InternalClientException("Client should have been assigned for the operation to continue.");
     }
 
     internal override async Task<HttpRequestMessageBuilder> BuildRequest()
     {
-        Action = AssumeRole;
+        Action = assumeRole;
         if (DurationInSeconds is null || DurationInSeconds.Value == 0)
-            DurationInSeconds = DefaultDurationInSeconds;
+            DurationInSeconds = defaultDurationInSeconds;
 
         var requestMessageBuilder = await Client.CreateRequest(HttpMethod.Post).ConfigureAwait(false);
 

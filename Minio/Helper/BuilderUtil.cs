@@ -1,4 +1,4 @@
-/*
+﻿/*
  * MinIO .NET Library for Amazon S3 Compatible Cloud Storage, (C) 2020 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ public static class BuilderUtil
         if (string.IsNullOrEmpty(endpoint))
             throw new ArgumentException($"'{nameof(endpoint)}' cannot be null or empty.", nameof(endpoint));
 
-        return endpoint.Contains(".dualstack.");
+        return endpoint.Contains(".dualstack.", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsAwsAccelerateEndpoint(string endpoint)
@@ -92,7 +92,7 @@ public static class BuilderUtil
     private static bool IsValidIPv4(string ip)
     {
         var posColon = ip.LastIndexOf(':');
-        if (posColon != -1) ip = ip.Substring(0, posColon);
+        if (posColon != -1) ip = ip[..posColon];
         var octetsStr = ip.Split('.');
         if (octetsStr.Length != 4) return false;
         var isValidSmallInt = Array.TrueForAll(octetsStr, IsValidSmallInt);
@@ -127,7 +127,7 @@ public static class BuilderUtil
                 return false;
             }
 
-            host = host.Substring(0, posColon);
+            host = host[..posColon];
         }
 
         // Check host if it is a hostname.

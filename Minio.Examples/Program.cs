@@ -1,19 +1,20 @@
 ﻿/*
-* MinIO .NET Library for Amazon S3 Compatible Cloud Storage, (C) 2017, 2020 MinIO, Inc.
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * MinIO .NET Library for Amazon S3 Compatible Cloud Storage, (C) 2017, 2020 MinIO, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -49,11 +50,12 @@ public static class Program
     {
         var characters = "0123456789abcdefghijklmnopqrstuvwxyz";
         var result = new StringBuilder(5);
-        for (var i = 0; i < 5; i++) result.Append(characters[rnd.Next(characters.Length)]);
+        for (var i = 0; i < 5; i++) _ = result.Append(characters[rnd.Next(characters.Length)]);
         return "minio-dotnet-example-" + result;
     }
 
-    public static async Task Main(string[] args)
+    [SuppressMessage("Design", "MA0051:Method is too long", Justification = "Needs to run all tests")]
+    public static async Task Main()
     {
         string endPoint = null;
         string accessKey = null;
@@ -69,7 +71,7 @@ public static class Program
             {
                 port = int.Parse(endPoint.Substring(posColon + 1, endPoint.Length - posColon - 1), NumberStyles.Integer,
                     CultureInfo.InvariantCulture);
-                endPoint = endPoint.Substring(0, posColon);
+                endPoint = endPoint[..posColon];
             }
 
             accessKey = Environment.GetEnvironmentVariable("ACCESS_KEY");
@@ -280,6 +282,6 @@ public static class Program
         File.Delete(smallFileName);
         File.Delete(bigFileName);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) Console.ReadLine();
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) _ = Console.ReadLine();
     }
 }

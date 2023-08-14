@@ -42,8 +42,7 @@ internal class V4Authenticator
     //
     private static readonly HashSet<string> ignoredHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
-        "authorization",
-        "user-agent"
+        "authorization", "user-agent"
     };
 
     private readonly string accessKey;
@@ -79,7 +78,7 @@ internal class V4Authenticator
     {
         if (!string.IsNullOrEmpty(region)) return region;
 
-        var endpointRegion = Regions.GetRegionFromEndpoint(endpoint);
+        var endpointRegion = RegionHelper.GetRegionFromEndpoint(endpoint);
         return string.IsNullOrEmpty(endpointRegion) ? "us-east-1" : endpointRegion;
     }
 
@@ -97,7 +96,7 @@ internal class V4Authenticator
         requestBuilder.RequestUri = requestBuilder.Request.RequestUri;
         var requestUri = requestBuilder.RequestUri;
 
-        if (requestUri.Port == 80 || requestUri.Port == 443)
+        if (requestUri.Port is 80 or 443)
             SetHostHeader(requestBuilder, requestUri.Host);
         else
             SetHostHeader(requestBuilder, requestUri.Host + ":" + requestUri.Port);
@@ -182,19 +181,17 @@ internal class V4Authenticator
         ReadOnlySpan<byte> requestBytes;
 
         ReadOnlySpan<byte> serviceBytes = Encoding.UTF8.GetBytes(GetService(isSts));
-        ReadOnlySpan<byte> formattedDateBytes = Encoding.UTF8.GetBytes(signingDate.ToString("yyyyMMdd"));
+        ReadOnlySpan<byte> formattedDateBytes =
+            Encoding.UTF8.GetBytes(signingDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
         ReadOnlySpan<byte> formattedKeyBytes = Encoding.UTF8.GetBytes($"AWS4{secretKey}");
         var dateKey = SignHmac(formattedKeyBytes, formattedDateBytes);
         ReadOnlySpan<byte> regionBytes = Encoding.UTF8.GetBytes(region);
         var dateRegionKey = SignHmac(dateKey, regionBytes);
         dateRegionServiceKey = SignHmac(dateRegionKey, serviceBytes);
         requestBytes = Encoding.UTF8.GetBytes("aws4_request");
-        var hmac = SignHmac(dateRegionServiceKey, requestBytes);
-#if NETSTANDARD
-        var signingKey = Encoding.UTF8.GetString(hmac.ToArray());
-#else
-        var signingKey = Encoding.UTF8.GetString(hmac);
-#endif
+
+        //var hmac = SignHmac(dateRegionServiceKey, requestBytes);
+        //var signingKey = Encoding.UTF8.GetString(hmac);
         return SignHmac(dateRegionServiceKey, requestBytes);
     }
 
@@ -266,7 +263,8 @@ internal class V4Authenticator
     /// <returns>Hexlified string of input bytes</returns>
     private string BytesToHex(ReadOnlySpan<byte> checkSum)
     {
-        return BitConverter.ToString(checkSum.ToArray()).Replace("-", string.Empty).ToLowerInvariant();
+        return BitConverter.ToString(checkSum.ToArray()).Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .ToLowerInvariant();
     }
 
     /// <summary>
@@ -313,7 +311,7 @@ internal class V4Authenticator
                         + Uri.EscapeDataString(accessKey + "/" + GetScope(region, signingDate))
                         + "&";
         requestQuery += "X-Amz-Date="
-                        + signingDate.ToString("yyyyMMddTHHmmssZ")
+                        + signingDate.ToString("yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture)
                         + "&";
         requestQuery += "X-Amz-Expires="
                         + expires
@@ -351,30 +349,30 @@ internal class V4Authenticator
         SortedDictionary<string, string> headersToSign)
     {
         var canonicalStringList = new LinkedList<string>();
-        canonicalStringList.AddLast(requestMethod.ToString());
+        _ = canonicalStringList.AddLast(requestMethod.ToString());
 
         var path = uri.AbsolutePath;
 
-        canonicalStringList.AddLast(path);
+        _ = canonicalStringList.AddLast(path);
         var queryParams = uri.Query.TrimStart('?').Split('&').ToList();
         queryParams.AddRange(headersToSign.Select(cv =>
             $"{Utils.UrlEncode(cv.Key)}={Utils.UrlEncode(cv.Value.Trim())}"));
         queryParams.Sort(StringComparer.Ordinal);
         var query = string.Join("&", queryParams);
-        canonicalStringList.AddLast(query);
+        _ = canonicalStringList.AddLast(query);
         var canonicalHost = GetCanonicalHost(uri);
-        canonicalStringList.AddLast($"host:{canonicalHost}");
+        _ = canonicalStringList.AddLast($"host:{canonicalHost}");
 
-        canonicalStringList.AddLast(string.Empty);
-        canonicalStringList.AddLast("host");
-        canonicalStringList.AddLast("UNSIGNED-PAYLOAD");
+        _ = canonicalStringList.AddLast(string.Empty);
+        _ = canonicalStringList.AddLast("host");
+        _ = canonicalStringList.AddLast("UNSIGNED-PAYLOAD");
 
         return string.Join("\n", canonicalStringList);
     }
 
     private static string GetCanonicalHost(Uri url)
     {
-        if (url.Port > 0 && url.Port != 80 && url.Port != 443)
+        if (url.Port is > 0 and not 80 and not 443)
             return $"{url.Host}:{url.Port}";
         return url.Host;
     }
@@ -390,7 +388,7 @@ internal class V4Authenticator
     {
         var canonicalStringList = new LinkedList<string>();
         // METHOD
-        canonicalStringList.AddLast(requestBuilder.Method.ToString());
+        _ = canonicalStringList.AddLast(requestBuilder.Method.ToString());
 
         var queryParamsDict = new Dictionary<string, string>(StringComparer.Ordinal);
         if (requestBuilder.QueryParameters is not null)
@@ -406,8 +404,8 @@ internal class V4Authenticator
             foreach (var p in queryKeys)
             {
                 if (sb1.Length > 0)
-                    sb1.Append('&');
-                sb1.AppendFormat(CultureInfo.InvariantCulture, "{0}={1}", p, queryParamsDict[p]);
+                    _ = sb1.Append('&');
+                _ = sb1.AppendFormat(CultureInfo.InvariantCulture, "{0}={1}", p, queryParamsDict[p]);
             }
 
             queryParams = sb1.ToString();
@@ -426,11 +424,7 @@ internal class V4Authenticator
                 cntntByteData = requestBuilder.Request.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
 
             // UTF conversion - String from bytes
-#if NETSTANDARD
-            queryParams = Encoding.UTF8.GetString(cntntByteData.ToArray(), 0, cntntByteData.Length);
-#else
             queryParams = Encoding.UTF8.GetString(cntntByteData);
-#endif
         }
 
         if (!string.IsNullOrEmpty(queryParams) &&
@@ -438,18 +432,18 @@ internal class V4Authenticator
             !string.Equals(requestBuilder.RequestUri.Query, "?location=", StringComparison.OrdinalIgnoreCase))
             requestBuilder.RequestUri = new Uri(requestBuilder.RequestUri + "?" + queryParams);
 
-        canonicalStringList.AddLast(requestBuilder.RequestUri.AbsolutePath);
-        canonicalStringList.AddLast(queryParams);
+        _ = canonicalStringList.AddLast(requestBuilder.RequestUri.AbsolutePath);
+        _ = canonicalStringList.AddLast(queryParams);
 
         // Headers to sign
         foreach (var header in headersToSign.Keys)
-            canonicalStringList.AddLast(header + ":" + S3utils.TrimAll(headersToSign[header]));
-        canonicalStringList.AddLast(string.Empty);
-        canonicalStringList.AddLast(string.Join(";", headersToSign.Keys));
+            _ = canonicalStringList.AddLast(header + ":" + S3utils.TrimAll(headersToSign[header]));
+        _ = canonicalStringList.AddLast(string.Empty);
+        _ = canonicalStringList.AddLast(string.Join(";", headersToSign.Keys));
         if (headersToSign.TryGetValue("x-amz-content-sha256", out var value))
-            canonicalStringList.AddLast(value);
+            _ = canonicalStringList.AddLast(value);
         else
-            canonicalStringList.AddLast(sha256EmptyFileHash);
+            _ = canonicalStringList.AddLast(sha256EmptyFileHash);
         return string.Join("\n", canonicalStringList);
     }
 
@@ -488,7 +482,8 @@ internal class V4Authenticator
     /// <param name="signingDate">Date for signature to be signed</param>
     private void SetDateHeader(HttpRequestMessageBuilder requestBuilder, DateTime signingDate)
     {
-        requestBuilder.AddOrUpdateHeaderParameter("x-amz-date", signingDate.ToString("yyyyMMddTHHmmssZ"));
+        requestBuilder.AddOrUpdateHeaderParameter("x-amz-date",
+            signingDate.ToString("yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -551,7 +546,8 @@ internal class V4Authenticator
 #else
             var hash = SHA256.HashData(body.Span);
 #endif
-            var hex = BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+            var hex = BitConverter.ToString(hash).Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .ToLowerInvariant();
             requestBuilder.AddOrUpdateHeaderParameter("x-amz-content-sha256", hex);
         }
         else if (!IsSecure && !requestBuilder.Content.IsEmpty)

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * MinIO .NET Library for Amazon S3 Compatible Cloud Storage, (C) 2020, 2021 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,21 +56,20 @@ public class PutObjectArgs : ObjectWriteArgs<PutObjectArgs>
         base.Validate();
         // Check atleast one of filename or stream are initialized
         if (string.IsNullOrWhiteSpace(FileName) && ObjectStreamData is null)
-            throw new ArgumentException("One of " + nameof(FileName) + " or " + nameof(ObjectStreamData) +
-                                        " must be set.", nameof(FileName));
+            throw new InvalidOperationException("One of " + nameof(FileName) + " or " + nameof(ObjectStreamData) +
+                                                " must be set.");
 
         if (PartNumber < 0)
-            throw new ArgumentOutOfRangeException(nameof(PartNumber), PartNumber,
-                "Invalid Part number value. Cannot be less than 0");
+            throw new InvalidDataException("Invalid Part number value. Cannot be less than 0");
         // Check if only one of filename or stream are initialized
         if (!string.IsNullOrWhiteSpace(FileName) && ObjectStreamData is not null)
-            throw new ArgumentException("Only one of " + nameof(FileName) + " or " + nameof(ObjectStreamData) +
-                                        " should be set.", nameof(FileName));
+            throw new InvalidOperationException("Only one of " + nameof(FileName) + " or " + nameof(ObjectStreamData) +
+                                                " should be set.");
 
         if (!string.IsNullOrWhiteSpace(FileName)) Utils.ValidateFile(FileName);
         // Check object size when using stream data
         if (ObjectStreamData is not null && ObjectSize == 0)
-            throw new ArgumentException($"{nameof(ObjectSize)} must be set", nameof(ObjectSize));
+            throw new InvalidOperationException($"{nameof(ObjectSize)} must be set");
         Populate();
     }
 
@@ -122,7 +121,8 @@ public class PutObjectArgs : ObjectWriteArgs<PutObjectArgs>
 #else
             var hash = SHA256.HashData(RequestBody.Span);
 #endif
-            var hex = BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+            var hex = BitConverter.ToString(hash).Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .ToLowerInvariant();
             requestMessageBuilder.AddOrUpdateHeaderParameter("x-amz-content-sha256", hex);
             requestMessageBuilder.SetBody(RequestBody);
         }
@@ -142,7 +142,7 @@ public class PutObjectArgs : ObjectWriteArgs<PutObjectArgs>
                     !OperationsUtil.IsSSEHeader(p.Key))
                 {
                     key = "x-amz-meta-" + key.ToLowerInvariant();
-                    Headers.Remove(p.Key);
+                    _ = Headers.Remove(p.Key);
                 }
 
                 Headers[key] = p.Value;
@@ -189,11 +189,5 @@ public class PutObjectArgs : ObjectWriteArgs<PutObjectArgs>
     {
         Progress = progress;
         return this;
-    }
-
-    ~PutObjectArgs()
-    {
-        if (!string.IsNullOrWhiteSpace(FileName))
-            ObjectStreamData?.Close();
     }
 }
